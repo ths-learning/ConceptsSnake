@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>貪食蛇：世界地理挑戰</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0fdf4; /* Tailwind green-50 */
+            touch-action: none; /* Prevent scrolling while playing on mobile */
+            overflow: hidden;
+        }
+        #game-board {
+            background-color: #1e293b; /* slate-800 */
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            display: block;
+            margin: 0 auto;
+        }
+        .btn-control {
+            background: #22c55e;
+            color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            user-select: none;
+            transition: transform 0.1s, background 0.2s;
+        }
+        .btn-control:active {
+            transform: scale(0.95);
+            background: #16a34a;
+        }
+        .modal {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center">
+
+    <!-- Header & Question Area -->
+    <div class="w-full max-w-2xl px-4 py-2 flex flex-col items-center z-10">
+        <div class="w-full flex justify-between items-end mb-2">
+            <h1 class="text-xl md:text-2xl font-bold text-green-800">🐍 地理貪食蛇</h1>
+            <div class="text-lg font-bold text-slate-700">分數: <span id="score" class="text-green-600">0</span></div>
+        </div>
+        
+        <div class="w-full bg-white border-2 border-green-400 rounded-xl p-3 md:p-4 shadow-md text-center min-h-[5rem] flex flex-col justify-center">
+            <span class="text-sm text-gray-500 mb-1" id="question-type">準備開始</span>
+            <h2 class="text-lg md:text-xl font-bold text-slate-800" id="question-text">點擊下方「開始遊戲」按鈕</h2>
+        </div>
+    </div>
+
+    <!-- Game Canvas -->
+    <div class="relative w-full max-w-2xl px-4 flex justify-center mt-2">
+        <canvas id="game-board" width="400" height="400"></canvas>
+        
+        <!-- Start/Game Over Overlay -->
+        <div id="overlay" class="absolute inset-0 modal mx-4 rounded-lg flex flex-col items-center justify-center opacity-100 transition-opacity duration-300">
+            <h2 id="overlay-title" class="text-3xl font-bold text-white mb-4 drop-shadow-md">世界地理挑戰</h2>
+            <p id="overlay-msg" class="text-white text-center mb-6 px-4">控制貪食蛇，吃掉<span class="text-yellow-300 font-bold">正確答案</span>！<br>撞牆、咬到自己或吃錯答案都會結束遊戲。</p>
+            <button id="start-btn" class="bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 text-lg">
+                開始遊戲
+            </button>
+        </div>
+    </div>
+
+    <!-- Mobile Controls (Visible mostly on small screens) -->
+    <div class="w-full max-w-md px-4 mt-4 grid grid-cols-3 gap-2 pb-4 sm:hidden z-10 h-40">
+        <div></div>
+        <div class="btn-control cursor-pointer" id="btn-up">▲</div>
+        <div></div>
+        <div class="btn-control cursor-pointer" id="btn-left">◀</div>
+        <div class="btn-control cursor-pointer" id="btn-down">▼</div>
+        <div class="btn-control cursor-pointer" id="btn-right">▶</div>
+    </div>
+    
+    <!-- Legend / Controls hint for Desktop -->
+    <div class="hidden sm:block mt-4 text-gray-600 text-sm">
+        使用鍵盤 <span class="font-bold border border-gray-300 rounded px-1">W</span> <span class="font-bold border border-gray-300 rounded px-1">A</span> <span class="font-bold border border-gray-300 rounded px-1">S</span> <span class="font-bold border border-gray-300 rounded px-1">D</span> 或 <span class="font-bold border border-gray-300 rounded px-1">方向鍵</span> 控制移動
+    </div>
+
+    <script>
+        // --- Data Source (Based on provided images) ---
+        const countryData = [
+            { name: "中國", continent: "亞洲", capital: "北京", touristCities: "上海、杭州、西安", tz: "UTC+08", lang: "普通話", religion: "無", climate: "溫帶/亞熱帶氣候", currency: "人民幣" },
+            { name: "馬來西亞", continent: "亞洲", capital: "吉隆坡", touristCities: "馬六甲/檳城", tz: "UTC+08", lang: "馬來語", religion: "伊斯蘭教", climate: "熱帶雨林氣候", currency: "令吉" },
+            { name: "泰國", continent: "亞洲", capital: "曼谷", touristCities: "布吉/芭堤雅/清邁", tz: "UTC+07", lang: "泰語", religion: "佛教", climate: "熱帶季風氣候", currency: "泰銖" },
+            { name: "沙特阿拉伯", continent: "中東", capital: "利雅德", touristCities: "麥加", tz: "UTC+03", lang: "阿拉伯語", religion: "伊斯蘭教", climate: "熱帶沙漠氣候", currency: "沙特里亞爾" },
+            { name: "埃及", continent: "中東", capital: "開羅", touristCities: "洪加達", tz: "UTC+02", lang: "阿拉伯語", religion: "伊斯蘭教", climate: "熱帶沙漠氣候", currency: "埃及鎊" },
+            { name: "阿聯酋", continent: "中東", capital: "阿布扎比", touristCities: "阿布扎比", tz: "UTC+04", lang: "阿拉伯語", religion: "伊斯蘭教", climate: "亞熱帶乾旱氣候", currency: "迪拉姆" },
+            { name: "法國", continent: "歐洲", capital: "巴黎", touristCities: "尼斯/康城", tz: "UTC+01", lang: "法語", religion: "天主教", climate: "溫和海洋性氣候", currency: "歐元" },
+            { name: "意大利", continent: "歐洲", capital: "羅馬", touristCities: "米蘭", tz: "UTC+01", lang: "意大利語", religion: "天主教", climate: "地中海型氣候", currency: "歐元" },
+            { name: "西班牙", continent: "歐洲", capital: "馬德里", touristCities: "巴塞隆拿", tz: "UTC+01", lang: "西班牙語", religion: "天主教", climate: "大陸性氣候", currency: "歐元" },
+            { name: "摩洛哥", continent: "非洲", capital: "拉巴特", touristCities: "馬拉喀什", tz: "UTC+0", lang: "阿拉伯文", religion: "伊斯蘭教", climate: "亞熱帶氣候", currency: "摩洛哥迪拉姆" },
+            { name: "南非", continent: "非洲", capital: "普利托里亞", touristCities: "約翰內斯堡", tz: "UTC+02", lang: "英語/南非荷蘭語", religion: "基督教/天主教", climate: "高壓亞熱帶氣候", currency: "南非蘭特" },
+            { name: "突尼斯", continent: "非洲", capital: "突尼斯", touristCities: "開羅安", tz: "UTC+01", lang: "阿拉伯語", religion: "伊斯蘭教", climate: "溫帶/荒漠氣候", currency: "突尼斯第納爾" },
+            { name: "美國", continent: "北美洲", capital: "華盛頓", touristCities: "紐約/三藩市", tz: "UTC-05 to -10", lang: "英語", religion: "基督教/天主教", climate: "多種氣候", currency: "美元" },
+            { name: "墨西哥", continent: "北美洲", capital: "墨西哥城", touristCities: "坎昆", tz: "UTC-06 to -08", lang: "西班牙語", religion: "天主教", climate: "熱帶沙/雨林氣候", currency: "墨西哥比索" },
+            { name: "加拿大", continent: "北美洲", capital: "渥太華", touristCities: "溫哥華", tz: "UTC-03 to -08", lang: "英語/法語", religion: "基督教/天主教", climate: "大陸性氣候", currency: "加拿大元" },
+            { name: "巴西", continent: "南美洲", capital: "巴西利亞", touristCities: "里約熱內盧", tz: "UTC-02 to -04", lang: "葡萄牙語", religion: "天主教", climate: "熱帶氣候", currency: "巴西雷亞爾" },
+            { name: "阿根廷", continent: "南美洲", capital: "布宜諾斯艾利斯", touristCities: "烏斯懷亞", tz: "UTC-03", lang: "西班牙語", religion: "天主教", climate: "熱帶/寒帶氣候", currency: "阿根廷比索" },
+            { name: "智利", continent: "南美洲", capital: "聖地牙哥", touristCities: "復活島", tz: "UTC-04", lang: "西班牙語", religion: "天主教", climate: "海洋/地中海氣候", currency: "智利比索" },
+            { name: "澳洲", continent: "大洋洲", capital: "坎培拉", touristCities: "悉尼", tz: "UTC+08 to +10", lang: "英語", religion: "基督教", climate: "乾旱/熱帶氣候", currency: "澳元" },
+            { name: "新西蘭", continent: "大洋洲", capital: "威靈頓", touristCities: "奧克蘭", tz: "UTC+12", lang: "英語", religion: "基督教", climate: "溫帶海洋性氣候", currency: "紐元" },
+            { name: "巴布亞新幾內亞", continent: "大洋洲", capital: "莫爾茲比港", touristCities: "高地地區", tz: "UTC+10", lang: "英語/皮欽語", religion: "無", climate: "赤道氣候", currency: "巴布亞新幾內亞基納" }
+        ];
+
+        // --- Question Generator ---
+        const questionTypes = [
+            { type: "首都", ask: c => `${c.name}的首都是哪裡？`, getAns: c => c.capital },
+            { type: "貨幣", ask: c => `${c.name}的貨幣是什麼？`, getAns: c => c.currency },
+            { type: "洲份", ask: c => `${c.name}屬於哪一個洲？`, getAns: c => c.continent },
+            { type: "官方語言", ask: c => `${c.name}的主要官方語言是什麼？`, getAns: c => c.lang.split('/')[0] },
+            { type: "宗教", ask: c => `${c.name}的主要宗教是什麼？`, getAns: c => c.religion.split('/')[0] },
+            { type: "時區", ask: c => `${c.name}的時區是？`, getAns: c => c.tz },
+            { type: "逆向：首都", ask: c => `${c.capital}是哪一個國家的首都？`, getAns: c => c.name },
+            { type: "逆向：貨幣", ask: c => `${c.currency}是哪一個國家的貨幣？`, getAns: c => c.name },
+            { type: "逆向：旅遊城市", ask: c => `${c.touristCities.split('/')[0]}是哪一個國家的主要旅遊城市？`, getAns: c => c.name }
+        ];
+
+        let allQuestions = [];
+
+        function buildQuestionPool() {
+            allQuestions = [];
+            for (const country of countryData) {
+                for (const qType of questionTypes) {
+                    const correctAnswer = qType.getAns(country);
+                    if (!correctAnswer || correctAnswer === "無") continue;
+
+                    // Get wrong answers (from the same category)
+                    let possibleWrongs = countryData
+                        .map(c => qType.getAns(c))
+                        .filter(a => a && a !== "無" && a !== correctAnswer);
+                    
+                    // Unique wrong answers
+                    possibleWrongs = [...new Set(possibleWrongs)];
+                    
+                    // Shuffle and pick 2
+                    possibleWrongs.sort(() => 0.5 - Math.random());
+                    const wrongAnswers = possibleWrongs.slice(0, 2);
+
+                    // Only add if we have enough distinct wrong answers
+                    if (wrongAnswers.length === 2) {
+                        allQuestions.push({
+                            type: qType.type,
+                            question: qType.ask(country),
+                            correct: correctAnswer,
+                            wrongs: wrongAnswers
+                        });
+                    }
+                }
+            }
+            // Shuffle all questions
+            allQuestions.sort(() => 0.5 - Math.random());
+        }
+
+        // --- Game Variables ---
+        const canvas = document.getElementById('game-board');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const questionTextElement = document.getElementById('question-text');
+        const questionTypeElement = document.getElementById('question-type');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayMsg = document.getElementById('overlay-msg');
+        const startBtn = document.getElementById('start-btn');
+
+        // Adjust canvas size based on screen
+        function resizeCanvas() {
+            const containerWidth = Math.min(window.innerWidth - 32, 600); 
+            // Keep it square
+            canvas.width = containerWidth;
+            canvas.height = containerWidth;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        let gridCount = 15; // 15x15 grid
+        let gridSize = canvas.width / gridCount;
+        
+        let snake = [];
+        let velocity = { x: 0, y: 0 };
+        let nextVelocity = { x: 0, y: 0 };
+        let currentQuestionIndex = 0;
+        let options = []; // The 3 food items
+        let score = 0;
+        let gameLoop;
+        let isGameOver = false;
+        let gameSpeed = 200; // ms per frame
+        let lastRenderTime = 0;
+
+        // Food Colors
+        const optionColors = ['#ef4444', '#3b82f6', '#eab308']; // Red, Blue, Yellow
+
+        // --- Core Functions ---
+
+        function initGame() {
+            buildQuestionPool();
+            gridSize = canvas.width / gridCount;
+            
+            snake = [
+                { x: Math.floor(gridCount / 2), y: Math.floor(gridCount / 2) },
+                { x: Math.floor(gridCount / 2) - 1, y: Math.floor(gridCount / 2) }
+            ];
+            velocity = { x: 1, y: 0 };
+            nextVelocity = { x: 1, y: 0 };
+            score = 0;
+            currentQuestionIndex = 0;
+            scoreElement.innerText = score;
+            isGameOver = false;
+            gameSpeed = 250; 
+
+            overlay.style.pointerEvents = "none";
+            overlay.classList.add('opacity-0');
+
+            loadNextQuestion();
+            requestAnimationFrame(main);
+        }
+
+        function loadNextQuestion() {
+            if (currentQuestionIndex >= allQuestions.length) {
+                // Win or loop around
+                buildQuestionPool();
+                currentQuestionIndex = 0;
+            }
+
+            const q = allQuestions[currentQuestionIndex];
+            questionTypeElement.innerText = `分類：${q.type}`;
+            questionTextElement.innerText = q.question;
+
+            // Prepare answers
+            let answers = [
+                { text: q.correct, isCorrect: true },
+                { text: q.wrongs[0], isCorrect: false },
+                { text: q.wrongs[1], isCorrect: false }
+            ];
+            answers.sort(() => 0.5 - Math.random()); // Shuffle options
+
+            // Place foods
+            options = [];
+            for (let i = 0; i < 3; i++) {
+                let positionFound = false;
+                let newPos;
+                while (!positionFound) {
+                    newPos = {
+                        x: Math.floor(Math.random() * gridCount),
+                        y: Math.floor(Math.random() * gridCount)
+                    };
+                    // Check if on snake
+                    let onSnake = snake.some(segment => segment.x === newPos.x && segment.y === newPos.y);
+                    // Check if on other options
+                    let onOptions = options.some(opt => opt.x === newPos.x && opt.y === newPos.y);
+                    
+                    if (!onSnake && !onOptions) {
+                        positionFound = true;
+                    }
+                }
+                options.push({
+                    x: newPos.x,
+                    y: newPos.y,
+                    text: answers[i].text,
+                    isCorrect: answers[i].isCorrect,
+                    color: optionColors[i]
+                });
+            }
+        }
+
+        function gameOver(reason) {
+            isGameOver = true;
+            overlayTitle.innerText = "遊戲結束";
+            overlayTitle.className = "text-3xl font-bold text-red-500 mb-4 drop-shadow-md";
+            
+            const q = allQuestions[currentQuestionIndex];
+            overlayMsg.innerHTML = `${reason}<br><br>你的最終分數: <b>${score}</b><br>這題正確答案是: <span class="text-green-300 font-bold">${q.correct}</span>`;
+            
+            startBtn.innerText = "重新開始";
+            overlay.style.pointerEvents = "auto";
+            overlay.classList.remove('opacity-0');
+        }
+
+        // --- Main Game Loop ---
+
+        function main(currentTime) {
+            if (isGameOver) return;
+            
+            window.requestAnimationFrame(main);
+            
+            const secondsSinceLastRender = (currentTime - lastRenderTime) / 1000;
+            if (secondsSinceLastRender < (gameSpeed / 1000)) return;
+            
+            lastRenderTime = currentTime;
+
+            update();
+            draw();
+        }
+
+        function update() {
+            velocity = nextVelocity;
+            
+            // Calculate new head
+            const head = { 
+                x: snake[0].x + velocity.x, 
+                y: snake[0].y + velocity.y 
+            };
+
+            // Wall Collision
+            if (head.x < 0 || head.x >= gridCount || head.y < 0 || head.y >= gridCount) {
+                gameOver("糟糕！你撞到牆壁了。");
+                return;
+            }
+
+            // Self Collision
+            if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
+                gameOver("糟糕！你咬到自己了。");
+                return;
+            }
+
+            snake.unshift(head); // Add new head
+
+            // Check food collision
+            let ateFood = false;
+            for (let i = 0; i < options.length; i++) {
+                if (head.x === options[i].x && head.y === options[i].y) {
+                    ateFood = true;
+                    if (options[i].isCorrect) {
+                        // Correct!
+                        score += 10;
+                        scoreElement.innerText = score;
+                        currentQuestionIndex++;
+                        
+                        // Speed up slightly
+                        if(gameSpeed > 100) gameSpeed -= 5; 
+
+                        loadNextQuestion();
+                    } else {
+                        // Wrong answer
+                        gameOver(`答錯了！你吃了「${options[i].text}」。`);
+                        return;
+                    }
+                    break;
+                }
+            }
+
+            if (!ateFood) {
+                snake.pop(); // Remove tail if no food eaten
+            }
+        }
+
+        function draw() {
+            // Clear Board
+            ctx.fillStyle = '#1e293b'; // slate-800
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Grid (Optional, for visual aid)
+            ctx.strokeStyle = '#334155'; // slate-700
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= gridCount; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * gridSize, 0);
+                ctx.lineTo(i * gridSize, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * gridSize);
+                ctx.lineTo(canvas.width, i * gridSize);
+                ctx.stroke();
+            }
+
+            // Draw Options (Food)
+            for (let opt of options) {
+                // Draw Box
+                ctx.fillStyle = opt.color;
+                ctx.shadowColor = opt.color;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.roundRect(opt.x * gridSize + 2, opt.y * gridSize + 2, gridSize - 4, gridSize - 4, 4);
+                ctx.fill();
+                ctx.shadowBlur = 0; // reset
+
+                // Draw Text
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${Math.max(10, gridSize * 0.35)}px 'Noto Sans TC'`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Truncate text if too long (e.g., long currency names)
+                let displayText = opt.text;
+                if(displayText.length > 5) displayText = displayText.substring(0,4) + '..';
+
+                ctx.fillText(displayText, opt.x * gridSize + gridSize/2, opt.y * gridSize + gridSize/2);
+            }
+
+            // Draw Snake
+            for (let i = 0; i < snake.length; i++) {
+                const segment = snake[i];
+                ctx.fillStyle = i === 0 ? '#4ade80' : '#22c55e'; // Lighter green for head
+                
+                // Eyes for head
+                if (i === 0) {
+                    ctx.beginPath();
+                    ctx.roundRect(segment.x * gridSize + 1, segment.y * gridSize + 1, gridSize - 2, gridSize - 2, 6);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#064e3b'; // Dark green eyes
+                    let eyeOffset = gridSize * 0.25;
+                    let eyeSize = gridSize * 0.15;
+                    
+                    if (velocity.x === 1) { // Right
+                        ctx.fillRect(segment.x * gridSize + gridSize - eyeOffset, segment.y * gridSize + eyeOffset, eyeSize, eyeSize);
+                        ctx.fillRect(segment.x * gridSize + gridSize - eyeOffset, segment.y * gridSize + gridSize - eyeOffset - eyeSize, eyeSize, eyeSize);
+                    } else if (velocity.x === -1) { // Left
+                        ctx.fillRect(segment.x * gridSize + eyeOffset - eyeSize, segment.y * gridSize + eyeOffset, eyeSize, eyeSize);
+                        ctx.fillRect(segment.x * gridSize + eyeOffset - eyeSize, segment.y * gridSize + gridSize - eyeOffset - eyeSize, eyeSize, eyeSize);
+                    } else if (velocity.y === -1) { // Up
+                        ctx.fillRect(segment.x * gridSize + eyeOffset, segment.y * gridSize + eyeOffset - eyeSize, eyeSize, eyeSize);
+                        ctx.fillRect(segment.x * gridSize + gridSize - eyeOffset - eyeSize, segment.y * gridSize + eyeOffset - eyeSize, eyeSize, eyeSize);
+                    } else { // Down
+                        ctx.fillRect(segment.x * gridSize + eyeOffset, segment.y * gridSize + gridSize - eyeOffset, eyeSize, eyeSize);
+                        ctx.fillRect(segment.x * gridSize + gridSize - eyeOffset - eyeSize, segment.y * gridSize + gridSize - eyeOffset, eyeSize, eyeSize);
+                    }
+                } else {
+                    ctx.beginPath();
+                    ctx.roundRect(segment.x * gridSize + 2, segment.y * gridSize + 2, gridSize - 4, gridSize - 4, 4);
+                    ctx.fill();
+                }
+            }
+        }
+
+        // --- Controls ---
+
+        function changeDirection(dx, dy) {
+            // Prevent 180-degree turns
+            if (velocity.x === 0 && dx !== 0) {
+                nextVelocity = { x: dx, y: 0 };
+            } else if (velocity.y === 0 && dy !== 0) {
+                nextVelocity = { x: 0, y: dy };
+            }
+        }
+
+        window.addEventListener('keydown', e => {
+            switch (e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    changeDirection(0, -1);
+                    e.preventDefault();
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    changeDirection(0, 1);
+                    e.preventDefault();
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    changeDirection(-1, 0);
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    changeDirection(1, 0);
+                    e.preventDefault();
+                    break;
+            }
+        });
+
+        // Mobile Controls binding
+        document.getElementById('btn-up').addEventListener('touchstart', (e) => { e.preventDefault(); changeDirection(0, -1); });
+        document.getElementById('btn-down').addEventListener('touchstart', (e) => { e.preventDefault(); changeDirection(0, 1); });
+        document.getElementById('btn-left').addEventListener('touchstart', (e) => { e.preventDefault(); changeDirection(-1, 0); });
+        document.getElementById('btn-right').addEventListener('touchstart', (e) => { e.preventDefault(); changeDirection(1, 0); });
+        
+        // Mouse click support for mobile buttons (if testing on desktop)
+        document.getElementById('btn-up').addEventListener('mousedown', () => changeDirection(0, -1));
+        document.getElementById('btn-down').addEventListener('mousedown', () => changeDirection(0, 1));
+        document.getElementById('btn-left').addEventListener('mousedown', () => changeDirection(-1, 0));
+        document.getElementById('btn-right').addEventListener('mousedown', () => changeDirection(1, 0));
+
+        // Swipe Controls for canvas
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        canvas.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, false);
+        
+        canvas.addEventListener('touchend', function(e) {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+        }, false);
+        
+        function handleSwipe(startX, startY, endX, endY) {
+            let dx = endX - startX;
+            let dy = endY - startY;
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Horizontal swipe
+                if (Math.abs(dx) > 30) { // Threshold
+                    if (dx > 0) changeDirection(1, 0); // Right
+                    else changeDirection(-1, 0); // Left
+                }
+            } else {
+                // Vertical swipe
+                if (Math.abs(dy) > 30) { // Threshold
+                    if (dy > 0) changeDirection(0, 1); // Down
+                    else changeDirection(0, -1); // Up
+                }
+            }
+        }
+
+        startBtn.addEventListener('click', initGame);
+        
+        // Initial setup
+        buildQuestionPool();
+
+    </script>
+</body>
+</html>
